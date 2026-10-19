@@ -2,30 +2,28 @@
 // Copyright (c) 2026 SuperJupiter
 #ifndef SUPERJUPITER_CHANNEL_ALIGN_H
 #define SUPERJUPITER_CHANNEL_ALIGN_H
-#if defined(__FAST_MATH__) || (defined(__FINITE_MATH_ONLY__) && __FINITE_MATH_ONLY__ > 0)
+#if defined(__FAST_MATH__) ||                                                  \
+    (defined(__FINITE_MATH_ONLY__) && __FINITE_MATH_ONLY__ > 0)
 #error "SuperJupiter requires IEEE non-finite checks; disable fast-math"
 #endif
 #include <float.h>
-#include <math.h>
 #include <stddef.h>
 #include <stdint.h>
-#define SUPERJUPITER_CHANNEL_ALIGN_VERSION "0.1.0"
+#define SUPERJUPITER_CHANNEL_ALIGN_VERSION "0.1.1"
 namespace superjupiter {
 namespace channel_align {
 
 namespace detail {
-inline bool finite(double value) { return value == value && value >= -DBL_MAX && value <= DBL_MAX; }
-inline double oneMinusExpNegative(double ratio) {
-  // Stable at small elapsed/tau without requiring AVR's unavailable expm1.
-  if (ratio < 0.01) {
-    double term = ratio, total = ratio;
-    for (unsigned n = 2; n <= 12; ++n) {
-      term *= -ratio / n;
-      total += term;
-    }
-    return total;
-  }
-  return 1 - ::exp(-ratio);
+inline bool finite(double value) {
+  return value == value && value >= -DBL_MAX && value <= DBL_MAX;
+}
+inline double blend(double a, double b, double fraction) {
+  if (fraction == 0 || a == b)
+    return a;
+  if (fraction == 1)
+    return b;
+  return (a < 0) != (b < 0) ? (1 - fraction) * a + fraction * b
+                            : a + fraction * (b - a);
 }
 } // namespace detail
 
@@ -39,7 +37,8 @@ enum class Status {
   InvalidTime,
   TooWide,
   Stale,
-  NumericError
+  NumericError,
+  InvalidConfig
 };
 struct Result {
   Status status;
@@ -47,7 +46,8 @@ struct Result {
   uint32_t ageMs;
 };
 template <size_t Channels> class ChannelAlign {
-  static_assert(Channels > 0 && Channels <= 256, "ChannelAlign requires 1..256 channels");
+  static_assert(Channels > 0 && Channels <= 256,
+                "ChannelAlign requires 1..256 channels");
   struct Pair {
     double older, newer;
     uint32_t oldMs, newMs;
@@ -60,7 +60,12 @@ template <size_t Channels> class ChannelAlign {
 public:
   ChannelAlign(uint32_t maxInterpolationMs, uint32_t maxHoldMs = 0)
       : interpolation_(maxInterpolationMs), hold_(maxHoldMs) {}
+  bool valid() const {
+    return interpolation_ < 0x80000000UL && hold_ < 0x80000000UL;
+  }
   Status push(size_t channel, double value, uint32_t atMs) {
+    if (!valid())
+      return Status::InvalidConfig;
     if (channel >= Channels)
       return Status::InvalidChannel;
     if (!detail::finite(value))
@@ -78,6 +83,8 @@ public:
     return Status::Ok;
   }
   Result at(size_t channel, uint32_t targetMs) const {
+    if (!valid())
+      return Result{Status::InvalidConfig, 0, 0};
     if (channel >= Channels)
       return Result{Status::InvalidChannel, 0, 0};
     const Pair &p = channels_[channel];
@@ -101,8 +108,9 @@ public:
     if (span > interpolation_ || interpolation_ >= 0x80000000UL)
       return Result{Status::TooWide, 0, 0};
     const double fraction = static_cast<double>(dt) / span;
-    const double value = (1 - fraction) * p.older + fraction * p.newer;
-    return Result{detail::finite(value) ? Status::Interpolated : Status::NumericError,
+    const double value = detail::blend(p.older, p.newer, fraction);
+    return Result{detail::finite(value) ? Status::Interpolated
+                                        : Status::NumericError,
                   detail::finite(value) ? value : 0, 0};
   }
 };

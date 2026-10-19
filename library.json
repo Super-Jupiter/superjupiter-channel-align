@@ -1,6 +1,6 @@
 {
   "name": "SuperJupiterChannelAlign",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Explicit bounded interpolation and stale-value handling across sensor channels. Portable C++11 by SuperJupiter. Hardware validation pending.",
   "keywords": [
     "sensor",

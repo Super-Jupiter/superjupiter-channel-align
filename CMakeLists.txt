@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(SuperJupiterChannelAlign VERSION 0.1.0 LANGUAGES CXX)
+project(SuperJupiterChannelAlign VERSION 0.1.1 LANGUAGES CXX)
 
 set(_superjupiter_channel_align_top_level OFF)
 if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
@@ -19,6 +19,9 @@ target_compile_features(SuperJupiterChannelAlign INTERFACE cxx_std_11)
 
 if(SUPERJUPITER_CHANNEL_ALIGN_BUILD_TESTS)
   enable_testing()
+  add_executable(superjupiter-channel-align-review tests/review_regressions.cpp)
+  target_link_libraries(superjupiter-channel-align-review PRIVATE SuperJupiter::ChannelAlign)
+  add_test(NAME superjupiter-channel-align-review COMMAND superjupiter-channel-align-review)
   add_executable(superjupiter-channel-align-tests tests/test.cpp)
   target_link_libraries(superjupiter-channel-align-tests PRIVATE SuperJupiter::ChannelAlign)
   add_test(NAME superjupiter-channel-align-tests COMMAND superjupiter-channel-align-tests)
