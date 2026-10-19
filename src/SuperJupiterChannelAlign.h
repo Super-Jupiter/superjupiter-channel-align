@@ -5,13 +5,30 @@
 #if defined(__FAST_MATH__) || (defined(__FINITE_MATH_ONLY__) && __FINITE_MATH_ONLY__ > 0)
 #error "SuperJupiter requires IEEE non-finite checks; disable fast-math"
 #endif
-#include <cmath>
-#include <cstddef>
-#include <cstdint>
-#include <limits>
+#include <float.h>
+#include <math.h>
+#include <stddef.h>
+#include <stdint.h>
 #define SUPERJUPITER_CHANNEL_ALIGN_VERSION "0.1.0"
 namespace superjupiter {
 namespace channel_align {
+
+namespace detail {
+inline bool finite(double value) { return value == value && value >= -DBL_MAX && value <= DBL_MAX; }
+inline double oneMinusExpNegative(double ratio) {
+  // Stable at small elapsed/tau without requiring AVR's unavailable expm1.
+  if (ratio < 0.01) {
+    double term = ratio, total = ratio;
+    for (unsigned n = 2; n <= 12; ++n) {
+      term *= -ratio / n;
+      total += term;
+    }
+    return total;
+  }
+  return 1 - ::exp(-ratio);
+}
+} // namespace detail
+
 enum class Status {
   Ok,
   Interpolated,
@@ -46,7 +63,7 @@ public:
   Status push(size_t channel, double value, uint32_t atMs) {
     if (channel >= Channels)
       return Status::InvalidChannel;
-    if (!std::isfinite(value))
+    if (!detail::finite(value))
       return Status::InvalidInput;
     Pair &p = channels_[channel];
     const uint32_t dt = atMs - p.newMs;
@@ -85,8 +102,8 @@ public:
       return Result{Status::TooWide, 0, 0};
     const double fraction = static_cast<double>(dt) / span;
     const double value = (1 - fraction) * p.older + fraction * p.newer;
-    return Result{std::isfinite(value) ? Status::Interpolated : Status::NumericError,
-                  std::isfinite(value) ? value : 0, 0};
+    return Result{detail::finite(value) ? Status::Interpolated : Status::NumericError,
+                  detail::finite(value) ? value : 0, 0};
   }
 };
 } // namespace channel_align
